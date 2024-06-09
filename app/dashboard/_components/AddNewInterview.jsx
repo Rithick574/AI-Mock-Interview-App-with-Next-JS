@@ -12,6 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { chatSession } from "@/utils/GeminiAIModal";
 import { LoaderCircle } from "lucide-react";
+import { MockInterview } from "@/utils/schema";
+import { v4 as uuidv4 } from 'uuid';
+import { db } from "@/utils/db";
+import { useUser } from "@clerk/nextjs";
+import moment from "moment";
+import { useRouter } from "next/navigation";
 
 function AddNewInterview() {
   const [openDialog, setOpenDialog] = useState(false);
@@ -19,21 +25,45 @@ function AddNewInterview() {
   const [jobDescription, setJobDescription] = useState("");
   const [jobExperience, setJobExperience] = useState("");
   const [loading, setLoading] = useState(false);
+  const [jsonResponse, setJsonResponse] = useState([]);
+  const { user } = useUser();
+  const router = useRouter();
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    const inputPrompt = `Job position: ${jobPosition}, Job Description: ${jobDescription}, Years of Experience: ${jobExperience}, Depends on Job Position, Job Description and Years of Experience give us ${process.env.NEXT_PUBLIC_INTERVIEW_QUESTION_COUNT} Interview question along with Answer in JSON format,Give us question and Answer field on JSON`;
+    const inputPrompt = `Job position: ${jobPosition}, Job Description: ${jobDescription}, Years of Experience: ${jobExperience}, Depends on Job Position, Job Description and Years of Experience give us ${process.env.NEXT_PUBLIC_INTERVIEW_QUESTION_COUNT} Interview question along with Answer in JSON format, Give us question and Answer field on JSON`;
 
     try {
       const result = await chatSession.sendMessage(inputPrompt);
       const responseText = await result.response.text();
-      const cleanedResponse = responseText.replace(/```json|```/g, "").trim();
-      const jsonResponsePart = cleanedResponse.match(/\[.*\]/s);
+      console.log("🚀 ~ file: AddNewInterview.jsx:41 ~ onSubmit ~ responseText:", responseText)
+      const jsonMatch = responseText.match(/\[.*?\]/s);
+      if (!jsonMatch) {
+        throw new Error("No valid JSON array found in the response");
+      }
+  
+      const jsonResponsePart = jsonMatch[0];
+      console.log("🚀 ~ file: AddNewInterview.jsx:43 ~ onSubmit ~ jsonResponsePart:", jsonResponsePart);
+  
       if (jsonResponsePart) {
-        const jsonResponse = JSON.parse(jsonResponsePart[0]);
-        console.log(jsonResponse);
+        const mockResponse = JSON.parse(jsonResponsePart.trim());
+        console.log("🚀 ~ file: AddNewInterview.jsx:45 ~ onSubmit ~ mockResponse:", mockResponse)
+        setJsonResponse(mockResponse);
+        const jsonString = JSON.stringify(mockResponse);
+        const res = await db.insert(MockInterview)
+          .values({
+            mockId: uuidv4(),
+            jsonMockResp: jsonString,
+            jobPosition: jobPosition,
+            jobDesc: jobDescription,
+            jobExperience: jobExperience,
+            createdBy: user?.primaryEmailAddress?.emailAddress,
+            createdAt: moment().format('DD-MM-YYYY'),
+          }).returning({ mockId: MockInterview.mockId });
+          setLoading(false);
+          router.push(`dashboard/interview/${res[0]?.mockId}`);
       } else {
         console.error("Error: Unable to extract JSON response");
       }
@@ -62,10 +92,10 @@ function AddNewInterview() {
           <DialogDescription>
             <form onSubmit={onSubmit}>
               <div>
-                <h2>
+                <p>
                   Add details about your job position/role, job description, and
                   years of experience
-                </h2>
+                </p>
                 <div className="mt-7 my-3">
                   <label>Job Role/Job Position</label>
                   <Input
