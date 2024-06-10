@@ -31,7 +31,7 @@
     ".next/types/**/*.ts",
     "**/*.ts",
     "**/*.tsx"
-  ],
+, "app/dashboard/interview/[interviewId]/feedback/page.jsx"  ],
   "exclude": [
     "node_modules"
   ]
